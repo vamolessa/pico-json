@@ -15,11 +15,11 @@ namespace PicoJson.Typed
 		}
 	}
 
-	public delegate void JsonElementSerializer<S, T>(ref S serializer, ref T value) where S : IJsonSerializer;
+	public delegate void JsonElementSerializer<T>(IJsonSerializer serializer, ref T value);
 
 	public interface IJsonSerializable
 	{
-		void Serialize<T>(ref T serializer) where T : IJsonSerializer;
+		void Serialize(IJsonSerializer serializer);
 	}
 
 	public interface IJsonSerializer
@@ -30,7 +30,7 @@ namespace PicoJson.Typed
 		void Serialize(string name, ref float value);
 		void Serialize(string name, ref string value);
 		void Serialize<T>(string name, ref T value) where T : IJsonSerializable, new();
-		void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer;
+		void Serialize<T>(string name, ref T[] value, JsonElementSerializer<T> elementSerializer);
 	}
 
 	public static class Json
@@ -39,7 +39,7 @@ namespace PicoJson.Typed
 		{
 		}
 
-		public ref struct Writer : IJsonSerializer
+		public sealed class Writer : IJsonSerializer
 		{
 			private StringBuilder sb;
 
@@ -96,7 +96,7 @@ namespace PicoJson.Typed
 			{
 				WritePrefix(name);
 				var startIndex = sb.Length;
-				value.Serialize(ref this);
+				value.Serialize(this);
 				if (startIndex < sb.Length)
 					sb[startIndex] = '{';
 				else
@@ -104,12 +104,12 @@ namespace PicoJson.Typed
 				sb.Append('}');
 			}
 
-			public void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer
+			public void Serialize<T>(string name, ref T[] value, JsonElementSerializer<T> elementSerializer)
 			{
 				WritePrefix(name);
 				var startIndex = sb.Length;
 				for (var i = 0; i < value.Length; i++)
-					elementSerializer(ref this, ref value[i]);
+					elementSerializer(this, ref value[i]);
 				if (startIndex < sb.Length)
 					sb[startIndex] = '[';
 				else
@@ -131,207 +131,7 @@ namespace PicoJson.Typed
 
 		public struct Reader : IJsonSerializer
 		{
-			private string source;
-			private int index;
-			private StringBuilder sb;
-			private string currentKey;
 
-			internal Reader(string source, int index, StringBuilder sb)
-			{
-				this.source = source;
-				this.index = index;
-				this.sb = sb;
-				this.currentKey = null;
-			}
-
-			public void Serialize(string name, ref JsonLazy value)
-			{
-				if (currentKey != name)
-					return;
-
-				value = new JsonLazy(source, index);
-				Consume(source, ref index, '{');
-				while (true)
-				{
-					var c = Next(source, ref index);
-					if (c == '}')
-						break;
-					if (c == '"')
-					{
-						while (true)
-						{
-							var s = Next(source, ref index);
-							if (s == '"')
-								break;
-							if (s == '\\')
-								Next(source, ref index);
-						}
-					}
-				}
-			}
-
-			public void Serialize(string name, ref bool value)
-			{
-				if (currentKey != name)
-					return;
-
-				switch (Next(source, ref index))
-				{
-				case 'f':
-					Consume(source, ref index, 'a');
-					Consume(source, ref index, 'l');
-					Consume(source, ref index, 's');
-					Consume(source, ref index, 'e');
-					SkipWhiteSpace(source, ref index);
-					value = false;
-					break;
-				case 't':
-					Consume(source, ref index, 'r');
-					Consume(source, ref index, 'u');
-					Consume(source, ref index, 'e');
-					SkipWhiteSpace(source, ref index);
-					value = true;
-					break;
-				default:
-					throw new ErrorException();
-				}
-			}
-
-			public void Serialize(string name, ref int value)
-			{
-				if (currentKey != name)
-					return;
-
-				var negative = Next(source, ref index) == '-';
-				if (negative)
-					index++;
-				if (!IsDigit(source, index))
-					throw new ErrorException();
-
-				while (Match(source, ref index, '0'))
-					continue;
-
-				var integer = 0;
-				while (IsDigit(source, index))
-				{
-					integer = 10 * integer + source[index] - '0';
-					index++;
-				}
-
-				if (Match(source, ref index, '.'))
-					throw new ErrorException();
-
-				SkipWhiteSpace(source, ref index);
-				value = negative ? -integer : integer;
-			}
-
-			public void Serialize(string name, ref float value)
-			{
-				if (currentKey != name)
-					return;
-
-				var negative = Next(source, ref index) == '-';
-				if (negative)
-					index++;
-				if (!IsDigit(source, index))
-					throw new ErrorException();
-
-				while (Match(source, ref index, '0'))
-					continue;
-
-				var integer = 0;
-				while (IsDigit(source, index))
-				{
-					integer = 10 * integer + source[index] - '0';
-					index++;
-				}
-
-				if (Match(source, ref index, '.'))
-				{
-					if (!IsDigit(source, index))
-						throw new ErrorException();
-
-					var fractionBase = 1.0f;
-					var fraction = 0.0f;
-
-					while (IsDigit(source, index))
-					{
-						fractionBase *= 0.1f;
-						fraction += (source[index] - '0') * fractionBase;
-						index++;
-					}
-
-					fraction += integer;
-					SkipWhiteSpace(source, ref index);
-					value = negative ? -fraction : fraction;
-				}
-				else
-				{
-					SkipWhiteSpace(source, ref index);
-					value = negative ? -integer : integer;
-				}
-			}
-
-			public void Serialize(string name, ref string value)
-			{
-				if (currentKey != name)
-					return;
-
-				if (Next(source, ref index) != '"')
-					throw new ErrorException();
-
-				value = ConsumeString(source, ref index, sb);
-			}
-
-			public void Serialize<T>(string name, ref T value) where T : IJsonSerializable, new()
-			{
-				if (currentKey != name)
-					return;
-
-				value = new T();
-				SkipWhiteSpace(source, ref index);
-				Consume(source, ref index, '{');
-				SkipWhiteSpace(source, ref index);
-				if (!Match(source, ref index, '}'))
-				{
-					do
-					{
-						SkipWhiteSpace(source, ref index);
-						Consume(source, ref index, '"');
-						var previousKey = currentKey;
-						currentKey = ConsumeString(source, ref index, sb);
-						Consume(source, ref index, ':');
-						value.Serialize(ref this);
-						currentKey = previousKey;
-					} while (Match(source, ref index, ','));
-					Consume(source, ref index, '}');
-				}
-				SkipWhiteSpace(source, ref index);
-			}
-
-			public void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer
-			{
-				if (currentKey != name)
-					return;
-
-				var list = new System.Collections.Generic.List<T>();
-				SkipWhiteSpace(source, ref index);
-				Consume(source, ref index, '[');
-				SkipWhiteSpace(source, ref index);
-				if (!Match(source, ref index, ']'))
-				{
-					do
-					{
-						SkipWhiteSpace(source, ref index);
-						var element = default(T);
-						elementSerializer(ref this, ref element);
-						list.Add(element);
-					} while (Match(source, ref index, ','));
-					Consume(source, ref index, ']');
-				}
-				SkipWhiteSpace(source, ref index);
-				value = list.ToArray();
-			}
 		}
 
 		private static void SkipWhiteSpace(string source, ref int index)
