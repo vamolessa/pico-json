@@ -3,93 +3,34 @@ using System.Text;
 
 namespace PicoJson.Typed
 {
-	public readonly struct JsonObject
+	public readonly struct JsonLazy
 	{
 		private readonly string source;
 		private readonly int index;
 
-		internal JsonObject(string source, int index)
+		internal JsonLazy(string source, int index)
 		{
 			this.source = source;
 			this.index = index;
 		}
 	}
 
+	public delegate void JsonElementSerializer<S, T>(ref S serializer, ref T value) where S : IJsonSerializer;
+
 	public interface IJsonSerializable
 	{
 		void Serialize<T>(ref T serializer) where T : IJsonSerializer;
 	}
 
-	public interface IJsonObject : IJsonSerializable
-	{
-	}
-
-	public interface IJsonArray : IJsonSerializable
-	{
-	}
-
-	public abstract class JsonBuffer<T>
-	{
-		protected int count = 0;
-		protected T[] buffer = new T[16];
-
-		public int Length { get { return count; } }
-
-		public T this[int index]
-		{
-			get { return buffer[index]; }
-			set { buffer[index] = value; }
-		}
-
-		public void Add(T element)
-		{
-			if (count >= buffer.Length)
-			{
-				var temp = new T[buffer.Length << 1];
-				System.Array.Copy(buffer, temp, buffer.Length);
-				buffer = temp;
-			}
-
-			buffer[count++] = element;
-		}
-
-		public T[] ToArray()
-		{
-			if (buffer == null || count == 0)
-				return new T[0];
-
-			var array = new T[count];
-			System.Array.Copy(buffer, 0, array, 0, array.Length);
-			return array;
-		}
-	}
-
-	public sealed class JsonArray<T> : JsonBuffer<T>, IJsonArray where T : IJsonSerializable, new()
-	{
-		public void Serialize<S>(ref S serializer) where S : IJsonSerializer
-		{
-			var type = serializer.GetType();
-			if (type == typeof(Json.Reader))
-			{
-				Add(default);
-				serializer.Serialize(null, ref buffer[count - 1]);
-			}
-			else if (type == typeof(Json.Writer))
-			{
-				for (var i = 0; i < count; i++)
-					serializer.Serialize(null, ref buffer[i]);
-			}
-		}
-	}
-
 	public interface IJsonSerializer
 	{
-		void Serialize(string name, ref JsonObject value);
+		void Serialize(string name, ref JsonLazy value);
 		void Serialize(string name, ref bool value);
 		void Serialize(string name, ref int value);
 		void Serialize(string name, ref float value);
 		void Serialize(string name, ref string value);
 		void Serialize<T>(string name, ref T value) where T : IJsonSerializable, new();
+		void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer;
 	}
 
 	public static class Json
@@ -98,7 +39,7 @@ namespace PicoJson.Typed
 		{
 		}
 
-		internal struct Writer : IJsonSerializer
+		public ref struct Writer : IJsonSerializer
 		{
 			private StringBuilder sb;
 
@@ -107,7 +48,7 @@ namespace PicoJson.Typed
 				this.sb = sb;
 			}
 
-			public void Serialize(string name, ref JsonObject value)
+			public void Serialize(string name, ref JsonLazy value)
 			{
 				throw new ErrorException();
 			}
@@ -138,14 +79,14 @@ namespace PicoJson.Typed
 				{
 					switch (c)
 					{
-						case '\"': sb.Append("\\\""); break;
-						case '\\': sb.Append("\\\\"); break;
-						case '\b': sb.Append("\\b"); break;
-						case '\f': sb.Append("\\f"); break;
-						case '\n': sb.Append("\\n"); break;
-						case '\r': sb.Append("\\r"); break;
-						case '\t': sb.Append("\\t"); break;
-						default: sb.Append(c); break;
+					case '\"': sb.Append("\\\""); break;
+					case '\\': sb.Append("\\\\"); break;
+					case '\b': sb.Append("\\b"); break;
+					case '\f': sb.Append("\\f"); break;
+					case '\n': sb.Append("\\n"); break;
+					case '\r': sb.Append("\\r"); break;
+					case '\t': sb.Append("\\t"); break;
+					default: sb.Append(c); break;
 					}
 				}
 				sb.Append('"');
@@ -156,29 +97,23 @@ namespace PicoJson.Typed
 				WritePrefix(name);
 				var startIndex = sb.Length;
 				value.Serialize(ref this);
-
-				var openCh = ' ';
-				var closeCh = ' ';
-				if (typeof(IJsonArray).IsAssignableFrom(typeof(T)))
-				{
-					openCh = '[';
-					closeCh = ']';
-				}
-				else if (typeof(IJsonObject).IsAssignableFrom(typeof(T)))
-				{
-					openCh = '{';
-					closeCh = '}';
-				}
-				else
-				{
-					throw new ErrorException();
-				}
-
 				if (startIndex < sb.Length)
-					sb[startIndex] = openCh;
+					sb[startIndex] = '{';
 				else
-					sb.Append(openCh);
-				sb.Append(closeCh);
+					sb.Append('{');
+				sb.Append('}');
+			}
+
+			public void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer
+			{
+				WritePrefix(name);
+				var startIndex = sb.Length;
+				for (var i = 0; i < value.Length; i++)
+					elementSerializer(ref this, ref value[i]);
+				if (startIndex < sb.Length)
+					sb[startIndex] = '[';
+				else
+					sb.Append(']');
 			}
 
 			private void WritePrefix(string name)
@@ -194,7 +129,7 @@ namespace PicoJson.Typed
 			}
 		}
 
-		internal struct Reader : IJsonSerializer
+		public struct Reader : IJsonSerializer
 		{
 			private string source;
 			private int index;
@@ -209,12 +144,12 @@ namespace PicoJson.Typed
 				this.currentKey = null;
 			}
 
-			public void Serialize(string name, ref JsonObject value)
+			public void Serialize(string name, ref JsonLazy value)
 			{
 				if (currentKey != name)
 					return;
 
-				value = new JsonObject(source, index);
+				value = new JsonLazy(source, index);
 				Consume(source, ref index, '{');
 				while (true)
 				{
@@ -242,23 +177,23 @@ namespace PicoJson.Typed
 
 				switch (Next(source, ref index))
 				{
-					case 'f':
-						Consume(source, ref index, 'a');
-						Consume(source, ref index, 'l');
-						Consume(source, ref index, 's');
-						Consume(source, ref index, 'e');
-						SkipWhiteSpace(source, ref index);
-						value = false;
-						break;
-					case 't':
-						Consume(source, ref index, 'r');
-						Consume(source, ref index, 'u');
-						Consume(source, ref index, 'e');
-						SkipWhiteSpace(source, ref index);
-						value = true;
-						break;
-					default:
-						throw new ErrorException();
+				case 'f':
+					Consume(source, ref index, 'a');
+					Consume(source, ref index, 'l');
+					Consume(source, ref index, 's');
+					Consume(source, ref index, 'e');
+					SkipWhiteSpace(source, ref index);
+					value = false;
+					break;
+				case 't':
+					Consume(source, ref index, 'r');
+					Consume(source, ref index, 'u');
+					Consume(source, ref index, 'e');
+					SkipWhiteSpace(source, ref index);
+					value = true;
+					break;
+				default:
+					throw new ErrorException();
 				}
 			}
 
@@ -355,41 +290,47 @@ namespace PicoJson.Typed
 
 				value = new T();
 				SkipWhiteSpace(source, ref index);
-				if (typeof(IJsonArray).IsAssignableFrom(typeof(T)))
+				Consume(source, ref index, '{');
+				SkipWhiteSpace(source, ref index);
+				if (!Match(source, ref index, '}'))
 				{
-					Consume(source, ref index, '[');
-					if (!Match(source, ref index, ']'))
+					do
 					{
-						do
-						{
-							value.Serialize(ref this);
-						} while (Match(source, ref index, ','));
-						Consume(source, ref index, ']');
-					}
-				}
-				else if (typeof(IJsonObject).IsAssignableFrom(typeof(T)))
-				{
-					Consume(source, ref index, '{');
-					if (!Match(source, ref index, '}'))
-					{
-						do
-						{
-							SkipWhiteSpace(source, ref index);
-							Consume(source, ref index, '"');
-							var previousKey = currentKey;
-							currentKey = ConsumeString(source, ref index, sb);
-							Consume(source, ref index, ':');
-							value.Serialize(ref this);
-							currentKey = previousKey;
-						} while (Match(source, ref index, ','));
-						Consume(source, ref index, '}');
-					}
-				}
-				else
-				{
-					throw new ErrorException();
+						SkipWhiteSpace(source, ref index);
+						Consume(source, ref index, '"');
+						var previousKey = currentKey;
+						currentKey = ConsumeString(source, ref index, sb);
+						Consume(source, ref index, ':');
+						value.Serialize(ref this);
+						currentKey = previousKey;
+					} while (Match(source, ref index, ','));
+					Consume(source, ref index, '}');
 				}
 				SkipWhiteSpace(source, ref index);
+			}
+
+			public void Serialize<S, T>(string name, ref T[] value, JsonElementSerializer<S, T> elementSerializer) where S : IJsonSerializer
+			{
+				if (currentKey != name)
+					return;
+
+				var list = new System.Collections.Generic.List<T>();
+				SkipWhiteSpace(source, ref index);
+				Consume(source, ref index, '[');
+				SkipWhiteSpace(source, ref index);
+				if (!Match(source, ref index, ']'))
+				{
+					do
+					{
+						SkipWhiteSpace(source, ref index);
+						var element = default(T);
+						elementSerializer(ref this, ref element);
+						list.Add(element);
+					} while (Match(source, ref index, ','));
+					Consume(source, ref index, ']');
+				}
+				SkipWhiteSpace(source, ref index);
+				value = list.ToArray();
 			}
 		}
 
@@ -438,27 +379,27 @@ namespace PicoJson.Typed
 				var c = Next(source, ref index);
 				switch (c)
 				{
-					case '"':
-						SkipWhiteSpace(source, ref index);
-						return sb.ToString();
-					case '\\':
-						switch (Next(source, ref index))
-						{
-							case '"': sb.Append('"'); break;
-							case '\\': sb.Append('\\'); break;
-							case '/': sb.Append('/'); break;
-							case 'b': sb.Append('\b'); break;
-							case 'f': sb.Append('\f'); break;
-							case 'n': sb.Append('\n'); break;
-							case 'r': sb.Append('\r'); break;
-							case 't': sb.Append('\t'); break;
-							case 'u': throw new ErrorException();
-							default: throw new ErrorException();
-						}
-						break;
-					default:
-						sb.Append(c);
-						break;
+				case '"':
+					SkipWhiteSpace(source, ref index);
+					return sb.ToString();
+				case '\\':
+					switch (Next(source, ref index))
+					{
+					case '"': sb.Append('"'); break;
+					case '\\': sb.Append('\\'); break;
+					case '/': sb.Append('/'); break;
+					case 'b': sb.Append('\b'); break;
+					case 'f': sb.Append('\f'); break;
+					case 'n': sb.Append('\n'); break;
+					case 'r': sb.Append('\r'); break;
+					case 't': sb.Append('\t'); break;
+					case 'u': throw new ErrorException();
+					default: throw new ErrorException();
+					}
+					break;
+				default:
+					sb.Append(c);
+					break;
 				}
 			}
 			throw new ErrorException();
