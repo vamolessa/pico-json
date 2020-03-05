@@ -1,0 +1,11 @@
+{
+	"FormattingOptions": {
+		"UseTabs": true,
+		"IndentSwitchSection": false,
+		"NewLinesForBracesInLambdaExpressionBody": false
+	},
+	"MSBuild": {
+		"UseLegacySdkResolver": true
+	}
+}
+
