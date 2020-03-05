@@ -41,7 +41,6 @@ public sealed class JsonTypedTests
 		}
 
 		var json = "";
-
 		switch (value)
 		{
 		case bool b:
@@ -65,35 +64,68 @@ public sealed class JsonTypedTests
 		Assert.Equal(expectedJson, json);
 	}
 
-	// [Fact]
-	// public void SerializeComplex()
-	// {
-	// 	var obj = new JsonObject {
-	// 		{"array", new JsonArray {
-	// 			{"string"},
-	// 			{false},
-	// 			{null},
-	// 			{0.25f},
-	// 			{new JsonObject{
-	// 				{"int", 7},
-	// 				{"bool", false},
-	// 				{"null", null},
-	// 				{"string", "some text"}
-	// 			}},
-	// 			{new JsonArray()}
-	// 		}},
-	// 		{"str", "asdad"},
-	// 		{"empty", new JsonObject()}
-	// 	};
+	public struct ComplexSerializeStruct : IJsonSerializable
+	{
+		public struct ArrayElement : IJsonSerializable
+		{
+			public int i;
+			public bool b;
+			public string s;
 
-	// 	var sb = new StringBuilder();
-	// 	Json.Serialize(obj, sb);
+			public void Serialize(IJsonSerializer serializer)
+			{
+				serializer.Serialize(nameof(i), ref i);
+				serializer.Serialize(nameof(b), ref b);
+				serializer.Serialize(nameof(s), ref s);
+			}
+		}
 
-	// 	Assert.Equal(
-	// 		"{\"array\":[\"string\",false,null,0.25,{\"int\":7,\"bool\":false,\"null\":null,\"string\":\"some text\"},[]],\"str\":\"asdad\",\"empty\":{}}",
-	// 		sb.ToString()
-	// 	);
-	// }
+		public struct Empty : IJsonSerializable
+		{
+			public void Serialize(IJsonSerializer serializer)
+			{
+			}
+		}
+
+		public ArrayElement[] array;
+		public string str;
+		public Empty empty;
+
+		public void Serialize(IJsonSerializer serializer)
+		{
+			serializer.Serialize(nameof(array), ref array, (IJsonSerializer s, ref ArrayElement e) => s.Serialize(null, ref e));
+			serializer.Serialize(nameof(str), ref str);
+			serializer.Serialize(nameof(empty), ref empty);
+		}
+	}
+
+	[Fact]
+	public void SerializeComplex()
+	{
+		var complex = new ComplexSerializeStruct
+		{
+			array = new ComplexSerializeStruct.ArrayElement[] {
+				new ComplexSerializeStruct.ArrayElement {
+					i = 7,
+					b = false,
+					s = null,
+				},
+				new ComplexSerializeStruct.ArrayElement {
+					i = -2,
+					b = true,
+					s = "some text",
+				},
+			},
+			str = "asdad",
+			empty = new ComplexSerializeStruct.Empty()
+		};
+
+		var json = Json.Serialize(complex);
+		Assert.Equal(
+			"{\"array\":[{\"i\":7,\"b\":false,\"s\":null},{\"i\":-2,\"b\":true,\"s\":\"some text\"}],\"str\":\"asdad\",\"empty\":{}}",
+			json
+		);
+	}
 
 	// [Theory]
 	// [InlineData("null", null)]
