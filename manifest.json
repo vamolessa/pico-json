@@ -1,0 +1,14 @@
+{
+	"name": "matheuslessarodrigues.pico-json",
+	"displayName": "Pico Json",
+	"version": "0.1.0",
+	"unity": "2018.1",
+	"description": "A really small json serializer/deserializer for C#",
+	"keywords": [
+		"json",
+		"parsing",
+		"serialization"
+	],
+	"category": "Serialization",
+	"dependencies": {}
+}
