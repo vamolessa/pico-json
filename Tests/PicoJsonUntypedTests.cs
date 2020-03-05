@@ -1,6 +1,6 @@
 using Xunit;
+using PicoJson;
 using PicoJson.Untyped;
-using System.Text;
 using System.Collections.Generic;
 
 public sealed class JsonUntypedTests
@@ -28,9 +28,8 @@ public sealed class JsonUntypedTests
 			_ => default
 		};
 
-		var sb = new StringBuilder();
-		Json.Serialize(jsonValue, sb);
-		Assert.Equal(expectedJson, sb.ToString());
+		var json = Json.Serialize(jsonValue);
+		Assert.Equal(expectedJson, json);
 	}
 
 	[Fact]
@@ -54,12 +53,11 @@ public sealed class JsonUntypedTests
 			{"empty", new JsonObject()}
 		};
 
-		var sb = new StringBuilder();
-		Json.Serialize(obj, sb);
+		var json = Json.Serialize(obj);
 
 		Assert.Equal(
 			"{\"array\":[\"string\",false,null,0.25,{\"int\":7,\"bool\":false,\"null\":null,\"string\":\"some text\"},[]],\"str\":\"asdad\",\"empty\":{}}",
-			sb.ToString()
+			json
 		);
 	}
 
