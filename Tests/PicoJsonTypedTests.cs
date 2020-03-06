@@ -82,7 +82,7 @@ public sealed class JsonTypedTests
 		Assert.Equal(expectedJson, json);
 	}
 
-	public struct ComplexSerializeStruct : IJsonSerializable
+	public struct ComplexStruct : IJsonSerializable
 	{
 		public struct ArrayElement : IJsonSerializable
 		{
@@ -109,6 +109,7 @@ public sealed class JsonTypedTests
 		public float[] numbers;
 		public string str;
 		public Empty empty;
+		public bool[] nullArray;
 
 		public void Serialize(IJsonSerializer serializer)
 		{
@@ -116,21 +117,22 @@ public sealed class JsonTypedTests
 			serializer.Serialize(nameof(numbers), ref numbers, (IJsonSerializer s, ref float e) => s.Serialize(null, ref e));
 			serializer.Serialize(nameof(str), ref str);
 			serializer.Serialize(nameof(empty), ref empty);
+			serializer.Serialize(nameof(nullArray), ref nullArray, (IJsonSerializer s, ref bool e) => s.Serialize(null, ref e));
 		}
 	}
 
 	[Fact]
 	public void SerializeComplex()
 	{
-		var complex = new ComplexSerializeStruct
+		var complex = new ComplexStruct
 		{
-			array = new ComplexSerializeStruct.ArrayElement[] {
-				new ComplexSerializeStruct.ArrayElement {
+			array = new ComplexStruct.ArrayElement[] {
+				new ComplexStruct.ArrayElement {
 					i = 7,
 					b = false,
 					s = null,
 				},
-				new ComplexSerializeStruct.ArrayElement {
+				new ComplexStruct.ArrayElement {
 					i = -2,
 					b = true,
 					s = "some text",
@@ -140,12 +142,12 @@ public sealed class JsonTypedTests
 				0.1f, 1.9f, -99.5f
 			},
 			str = "asdad",
-			empty = new ComplexSerializeStruct.Empty()
+			empty = new ComplexStruct.Empty()
 		};
 
 		var json = Json.Serialize(complex);
 		Assert.Equal(
-			"{\"array\":[{\"i\":7,\"b\":false,\"s\":null},{\"i\":-2,\"b\":true,\"s\":\"some text\"}],\"numbers\":[0.1,1.9,-99.5],\"str\":\"asdad\",\"empty\":{}}",
+			"{\"array\":[{\"i\":7,\"b\":false,\"s\":null},{\"i\":-2,\"b\":true,\"s\":\"some text\"}],\"numbers\":[0.1,1.9,-99.5],\"str\":\"asdad\",\"empty\":{},\"nullArray\":null}",
 			json
 		);
 	}
@@ -192,35 +194,37 @@ public sealed class JsonTypedTests
 		}
 	}
 
-	// [Fact]
-	// public void DeserializeComplex()
-	// {
-	// 	Assert.True(Json.TryDeserialize(
-	// 		" { \"array\"  : [\"string\",  false,null,0.25,\n{\"int\":  7,  \"bool\":false,\"null\":null, \t\n   \"string\":\"some text\"},[]],   \n\"str\":\"asdad\", \"empty\":{}}",
-	// 		out var value
-	// 	));
+	[Fact]
+	public void DeserializeComplex()
+	{
+		var success = Json.TryDeserialize(
+			" { \"array\"  : [ {\"i\" :   7 ,\"b\": false, \"s\" :null  },{ \"i\":  -2 ,\"b\" :true,  \"s\":  \"some text\"}  ], \"numbers\" :  [0.1,1.9,-99.5],  \"str\":  \"asdad\",\"empty\" :{    }   ,\"nullArray\": null}   ",
+			out ComplexStruct value
+		);
+		Assert.True(success);
 
-	// 	Assert.True(value.IsObject);
+		Assert.NotNull(value.array);
+		Assert.Equal(2, value.array.Length);
 
-	// 	Assert.True(value["array"].IsArray);
-	// 	Assert.Equal(6, value["array"].Count);
-	// 	Assert.Equal("string", value["array"][0].wrapped);
-	// 	Assert.Equal(false, value["array"][1].wrapped);
-	// 	Assert.Null(value["array"][2].wrapped);
-	// 	Assert.Equal(0.25f, value["array"][3].wrapped);
+		Assert.Equal(7, value.array[0].i);
+		Assert.False(value.array[0].b);
+		Assert.Null(value.array[0].s);
 
-	// 	Assert.True(value["array"][4].IsObject);
-	// 	Assert.Equal(7, value["array"][4]["int"].wrapped);
-	// 	Assert.Equal(false, value["array"][4]["bool"].wrapped);
-	// 	Assert.Null(value["array"][4]["null"].wrapped);
-	// 	Assert.Equal("some text", value["array"][4]["string"].wrapped);
+		Assert.Equal(-2, value.array[1].i);
+		Assert.True(value.array[1].b);
+		Assert.Equal("some text", value.array[1].s);
 
-	// 	Assert.True(value["array"][5].IsArray);
-	// 	Assert.Equal(0, value["array"][5].Count);
+		Assert.NotNull(value.numbers);
+		Assert.Equal(3, value.numbers.Length);
 
-	// 	Assert.Equal("asdad", value["str"].wrapped);
-	// 	Assert.True(value["empty"].IsObject);
-	// }
+		Assert.Equal(0.1f, value.numbers[0]);
+		Assert.Equal(1.9f, value.numbers[1]);
+		Assert.Equal(-99.5f, value.numbers[2]);
+
+		Assert.Equal("asdad", value.str);
+
+		Assert.Null(value.nullArray);
+	}
 
 	// [Theory]
 	// [InlineData("[]")]

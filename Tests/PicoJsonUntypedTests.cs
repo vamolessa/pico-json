@@ -85,10 +85,11 @@ public sealed class JsonUntypedTests
 	[Fact]
 	public void DeserializeComplex()
 	{
-		Assert.True(Json.TryDeserialize(
-			" { \"array\"  : [\"string\",  false,null,0.25,\n{\"int\":  7,  \"bool\":false,\"null\":null, \t\n   \"string\":\"some text\"},[]],   \n\"str\":\"asdad\", \"empty\":{}}",
+		var success = Json.TryDeserialize(
+			" { \"array\"  : [\"string\",  false,null,  0.25,\n{\"int\":  7,  \"bool\":false,\"null\":null, \t\n   \"string\":\"some text\"},[]],   \n\"str\":\"asdad\", \"empty\":{}}   ",
 			out var value
-		));
+		);
+		Assert.True(success);
 
 		Assert.True(value.IsObject);
 

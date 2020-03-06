@@ -577,12 +577,10 @@ namespace PicoJson
 				if (currentKey != name)
 					return;
 
+				value = null;
 				SkipWhiteSpace(source, ref index);
 				if (ConsumeNullOr(source, ref index, '['))
-				{
-					value = null;
 					return;
-				}
 
 				var list = new System.Collections.Generic.List<T>();
 				SkipWhiteSpace(source, ref index);
