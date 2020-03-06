@@ -4,20 +4,43 @@ using PicoJson.Typed;
 
 public sealed class JsonTypedTests
 {
-	public readonly struct SerializeWrapper<T> : IJsonSerializable
+	public struct WrappedBool : IJsonSerializable
 	{
-		public readonly T value;
-		public readonly System.Action<IJsonSerializer, T> serializeFunction;
-
-		public SerializeWrapper(T value, System.Action<IJsonSerializer, T> serializeFunction)
-		{
-			this.value = value;
-			this.serializeFunction = serializeFunction;
-		}
+		public bool value;
 
 		public void Serialize(IJsonSerializer serializer)
 		{
-			serializeFunction(serializer, value);
+			serializer.Serialize(nameof(value), ref value);
+		}
+	}
+
+	public struct WrappedInt : IJsonSerializable
+	{
+		public int value;
+
+		public void Serialize(IJsonSerializer serializer)
+		{
+			serializer.Serialize(nameof(value), ref value);
+		}
+	}
+
+	public struct WrappedFloat : IJsonSerializable
+	{
+		public float value;
+
+		public void Serialize(IJsonSerializer serializer)
+		{
+			serializer.Serialize(nameof(value), ref value);
+		}
+	}
+
+	public struct WrappedString : IJsonSerializable
+	{
+		public string value;
+
+		public void Serialize(IJsonSerializer serializer)
+		{
+			serializer.Serialize(nameof(value), ref value);
 		}
 	}
 
@@ -35,28 +58,23 @@ public sealed class JsonTypedTests
 	[InlineData("\"\\/\b\f\n\r\t", "\"\\\"\\\\/\\b\\f\\n\\r\\t\"")]
 	public void SerializeValue(object value, string expectedJson)
 	{
-		SerializeWrapper<T> Wrap<T>(T v, System.Action<IJsonSerializer, T> s)
-		{
-			return new SerializeWrapper<T>(v, s);
-		}
-
 		var json = "";
 		switch (value)
 		{
 		case bool b:
-			json = Json.Serialize(Wrap(b, (s, v) => s.Serialize("value", ref v)));
+			json = Json.Serialize(new WrappedBool { value = b });
 			break;
 		case int i:
-			json = Json.Serialize(Wrap(i, (s, v) => s.Serialize("value", ref v)));
+			json = Json.Serialize(new WrappedInt { value = i });
 			break;
 		case float f:
-			json = Json.Serialize(Wrap(f, (s, v) => s.Serialize("value", ref v)));
+			json = Json.Serialize(new WrappedFloat { value = f });
 			break;
 		case string s:
-			json = Json.Serialize(Wrap(s, (s, v) => s.Serialize("value", ref v)));
+			json = Json.Serialize(new WrappedString { value = s });
 			break;
 		default:
-			json = Json.Serialize(Wrap<string>(null, (s, v) => s.Serialize("value", ref v)));
+			json = Json.Serialize(new WrappedString { value = null });
 			break;
 		}
 
@@ -88,12 +106,14 @@ public sealed class JsonTypedTests
 		}
 
 		public ArrayElement[] array;
+		public float[] numbers;
 		public string str;
 		public Empty empty;
 
 		public void Serialize(IJsonSerializer serializer)
 		{
 			serializer.Serialize(nameof(array), ref array, (IJsonSerializer s, ref ArrayElement e) => s.Serialize(null, ref e));
+			serializer.Serialize(nameof(numbers), ref numbers, (IJsonSerializer s, ref float e) => s.Serialize(null, ref e));
 			serializer.Serialize(nameof(str), ref str);
 			serializer.Serialize(nameof(empty), ref empty);
 		}
@@ -116,37 +136,61 @@ public sealed class JsonTypedTests
 					s = "some text",
 				},
 			},
+			numbers = new float[] {
+				0.1f, 1.9f, -99.5f
+			},
 			str = "asdad",
 			empty = new ComplexSerializeStruct.Empty()
 		};
 
 		var json = Json.Serialize(complex);
 		Assert.Equal(
-			"{\"array\":[{\"i\":7,\"b\":false,\"s\":null},{\"i\":-2,\"b\":true,\"s\":\"some text\"}],\"str\":\"asdad\",\"empty\":{}}",
+			"{\"array\":[{\"i\":7,\"b\":false,\"s\":null},{\"i\":-2,\"b\":true,\"s\":\"some text\"}],\"numbers\":[0.1,1.9,-99.5],\"str\":\"asdad\",\"empty\":{}}",
 			json
 		);
 	}
 
-	// [Theory]
-	// [InlineData("null", null)]
-	// [InlineData("true", true)]
-	// [InlineData("false", false)]
-	// [InlineData("0", 0)]
-	// [InlineData("1", 1)]
-	// [InlineData("-1", -1)]
-	// [InlineData("99.5", 99.5f)]
-	// [InlineData("99.25", 99.25f)]
-	// [InlineData("99.125", 99.125f)]
-	// [InlineData("\"string\"", "string")]
-	// [InlineData("\"\\u00e1\"", "\u00e1")]
-	// [InlineData("\"\\ufa09\"", "\ufa09")]
-	// [InlineData("\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"", "\"\\/\b\f\n\r\t")]
-	// public void DeserializeValue(string json, object expectedValue)
-	// {
-	// 	var success = Json.TryDeserialize(json, out var value);
-	// 	Assert.True(success);
-	// 	Assert.Equal(expectedValue, value.wrapped);
-	// }
+	[Theory]
+	[InlineData("null", null)]
+	[InlineData("true", true)]
+	[InlineData("false", false)]
+	[InlineData("0", 0)]
+	[InlineData("1", 1)]
+	[InlineData("-1", -1)]
+	[InlineData("99.5", 99.5f)]
+	[InlineData("99.25", 99.25f)]
+	[InlineData("99.125", 99.125f)]
+	[InlineData("\"string\"", "string")]
+	[InlineData("\"\\u00e1\"", "\u00e1")]
+	[InlineData("\"\\ufa09\"", "\ufa09")]
+	[InlineData("\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"", "\"\\/\b\f\n\r\t")]
+	public void DeserializeValue(string json, object expectedValue)
+	{
+		json = string.Concat("{\"value\":", json, "}");
+		switch (expectedValue)
+		{
+		case bool b:
+			Assert.True(Json.TryDeserialize(json, out WrappedBool wb));
+			Assert.Equal(expectedValue, wb.value);
+			break;
+		case int i:
+			Assert.True(Json.TryDeserialize(json, out WrappedInt wi));
+			Assert.Equal(expectedValue, wi.value);
+			break;
+		case float f:
+			Assert.True(Json.TryDeserialize(json, out WrappedFloat wf));
+			Assert.Equal(expectedValue, wf.value);
+			break;
+		case string s:
+			Assert.True(Json.TryDeserialize(json, out WrappedString ws));
+			Assert.Equal(expectedValue, ws.value);
+			break;
+		default:
+			Assert.True(Json.TryDeserialize(json, out WrappedString wn));
+			Assert.Null(wn.value);
+			break;
+		}
+	}
 
 	// [Fact]
 	// public void DeserializeComplex()

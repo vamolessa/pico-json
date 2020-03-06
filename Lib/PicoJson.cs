@@ -319,44 +319,16 @@ namespace PicoJson
 				}
 			default:
 				{
-					var negative = source[--index] == '-';
-					if (negative)
-						index++;
-					if (!IsDigit(source, index))
-						throw new ParseErrorException();
-
-					while (Match(source, ref index, '0'))
-						continue;
-
-					var integer = 0;
-					while (IsDigit(source, index))
+					var integer = ConsumeInteger(source, ref index);
+					if (!Match(source, ref index, '.'))
 					{
-						integer = 10 * integer + source[index] - '0';
-						index++;
-					}
-
-					if (Match(source, ref index, '.'))
-					{
-						if (!IsDigit(source, index))
-							throw new ParseErrorException();
-
-						var fractionBase = 1.0f;
-						var fraction = 0.0f;
-
-						while (IsDigit(source, index))
-						{
-							fractionBase *= 0.1f;
-							fraction += (source[index] - '0') * fractionBase;
-							index++;
-						}
-
-						fraction += integer;
 						SkipWhiteSpace(source, ref index);
-						return negative ? -fraction : fraction;
+						return integer;
 					}
 
+					var fraction = ConsumeFraction(source, ref index);
 					SkipWhiteSpace(source, ref index);
-					return negative ? -integer : integer;
+					return integer + (integer >= 0 ? fraction : -fraction);
 				}
 			}
 		}
@@ -373,7 +345,8 @@ namespace PicoJson
 			value = default;
 			try
 			{
-				CachedReader.Value.Reset(CachedSb.Value, source, 0).Serialize(null, ref value);
+				var index = 0;
+				CachedReader.Value.Reset(CachedSb.Value, source, index).Serialize(null, ref value);
 				return true;
 			}
 			catch (ParseErrorException)
@@ -445,6 +418,12 @@ namespace PicoJson
 			public void Serialize<T>(string name, ref T[] value, Typed.JsonElementSerializer<T> elementSerializer)
 			{
 				WritePrefix(name);
+				if (value == null)
+				{
+					sb.Append("null");
+					return;
+				}
+
 				sb.Append('[');
 				for (var i = 0; i < value.Length; i++)
 					elementSerializer(this, ref value[i]);
@@ -484,6 +463,7 @@ namespace PicoJson
 				this.source = source;
 				this.index = index;
 				this.currentKey = null;
+				SkipWhiteSpace(source, ref index);
 				return this;
 			}
 
@@ -528,27 +508,11 @@ namespace PicoJson
 				if (currentKey != name)
 					return;
 
-				var negative = Next(source, ref index) == '-';
-				if (negative)
-					index++;
-				if (!IsDigit(source, index))
-					throw new ParseErrorException();
-
-				while (Match(source, ref index, '0'))
-					continue;
-
-				var integer = 0;
-				while (IsDigit(source, index))
-				{
-					integer = 10 * integer + source[index] - '0';
-					index++;
-				}
-
+				Next(source, ref index);
+				value = ConsumeInteger(source, ref index);
 				if (Match(source, ref index, '.'))
 					throw new ParseErrorException();
-
 				SkipWhiteSpace(source, ref index);
-				value = negative ? -integer : integer;
 			}
 
 			public void Serialize(string name, ref float value)
@@ -556,46 +520,17 @@ namespace PicoJson
 				if (currentKey != name)
 					return;
 
-				var negative = Next(source, ref index) == '-';
-				if (negative)
-					index++;
-				if (!IsDigit(source, index))
-					throw new ParseErrorException();
-
-				while (Match(source, ref index, '0'))
-					continue;
-
-				var integer = 0;
-				while (IsDigit(source, index))
-				{
-					integer = 10 * integer + source[index] - '0';
-					index++;
-				}
-
+				Next(source, ref index);
+				value = ConsumeInteger(source, ref index);
 				if (Match(source, ref index, '.'))
 				{
-					if (!IsDigit(source, index))
-						throw new ParseErrorException();
-
-					var fractionBase = 1.0f;
-					var fraction = 0.0f;
-
-					while (IsDigit(source, index))
-					{
-						fractionBase *= 0.1f;
-						fraction += (source[index] - '0') * fractionBase;
-						index++;
-					}
-
-					fraction += integer;
-					SkipWhiteSpace(source, ref index);
-					value = negative ? -fraction : fraction;
+					var fraction = ConsumeFraction(source, ref index);
+					if (value >= 0.0f)
+						value += fraction;
+					else
+						value -= fraction;
 				}
-				else
-				{
-					SkipWhiteSpace(source, ref index);
-					value = negative ? -integer : integer;
-				}
+				SkipWhiteSpace(source, ref index);
 			}
 
 			public void Serialize(string name, ref string value)
@@ -603,10 +538,10 @@ namespace PicoJson
 				if (currentKey != name)
 					return;
 
-				if (Next(source, ref index) != '"')
-					throw new ParseErrorException();
-
-				value = ConsumeString(source, ref index, sb);
+				if (ConsumeNullOr(source, ref index, '"'))
+					value = null;
+				else
+					value = ConsumeString(source, ref index, sb);
 			}
 
 			public void Serialize<T>(string name, ref T value) where T : struct, Typed.IJsonSerializable
@@ -616,15 +551,17 @@ namespace PicoJson
 
 				value = default(T);
 				SkipWhiteSpace(source, ref index);
-				Consume(source, ref index, '{');
+				if (ConsumeNullOr(source, ref index, '{'))
+					return;
+
 				SkipWhiteSpace(source, ref index);
 				if (!Match(source, ref index, '}'))
 				{
 					do
 					{
 						SkipWhiteSpace(source, ref index);
-						Consume(source, ref index, '"');
 						var previousKey = currentKey;
+						Consume(source, ref index, '"');
 						currentKey = ConsumeString(source, ref index, sb);
 						Consume(source, ref index, ':');
 						value.Serialize(this);
@@ -640,9 +577,14 @@ namespace PicoJson
 				if (currentKey != name)
 					return;
 
-				var list = new System.Collections.Generic.List<T>();
 				SkipWhiteSpace(source, ref index);
-				Consume(source, ref index, '[');
+				if (ConsumeNullOr(source, ref index, '['))
+				{
+					value = null;
+					return;
+				}
+
+				var list = new System.Collections.Generic.List<T>();
 				SkipWhiteSpace(source, ref index);
 				if (!Match(source, ref index, ']'))
 				{
@@ -688,9 +630,63 @@ namespace PicoJson
 				throw new ParseErrorException();
 		}
 
+		private static bool ConsumeNullOr(string source, ref int index, char c)
+		{
+			var n = Next(source, ref index);
+			if (n == c)
+				return false;
+			if (n != 'n')
+				throw new ParseErrorException();
+
+			Consume(source, ref index, 'u');
+			Consume(source, ref index, 'l');
+			Consume(source, ref index, 'l');
+			SkipWhiteSpace(source, ref index);
+			return true;
+		}
+
 		private static bool IsDigit(string s, int i)
 		{
 			return i < s.Length && char.IsDigit(s, i);
+		}
+
+		private static int ConsumeInteger(string source, ref int index)
+		{
+			var negative = source[--index] == '-';
+			if (negative)
+				index++;
+			if (!IsDigit(source, index))
+				throw new ParseErrorException();
+
+			while (Match(source, ref index, '0'))
+				continue;
+
+			var integer = 0;
+			while (IsDigit(source, index))
+			{
+				integer = 10 * integer + source[index] - '0';
+				index++;
+			}
+
+			return negative ? -integer : integer;
+		}
+
+		private static float ConsumeFraction(string source, ref int index)
+		{
+			if (!IsDigit(source, index))
+				throw new ParseErrorException();
+
+			var fractionBase = 1.0f;
+			var fraction = 0.0f;
+
+			while (IsDigit(source, index))
+			{
+				fractionBase *= 0.1f;
+				fraction += (source[index] - '0') * fractionBase;
+				index++;
+			}
+
+			return fraction;
 		}
 
 		private static int ConsumeHexDigit(string source, ref int index)
