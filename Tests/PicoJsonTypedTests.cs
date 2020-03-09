@@ -113,7 +113,9 @@ public sealed class JsonTypedTests
 
 		public void Serialize(IJsonSerializer serializer)
 		{
-			serializer.Serialize(nameof(array), ref array, (IJsonSerializer s, ref ArrayElement e) => s.Serialize(null, ref e));
+			serializer.Serialize(nameof(array), ref array, (IJsonSerializer s, ref ArrayElement e) => {
+				s.Serialize(null, ref e);
+			});
 			serializer.Serialize(nameof(numbers), ref numbers, (IJsonSerializer s, ref float e) => s.Serialize(null, ref e));
 			serializer.Serialize(nameof(str), ref str);
 			serializer.Serialize(nameof(empty), ref empty);
@@ -198,7 +200,7 @@ public sealed class JsonTypedTests
 	public void DeserializeComplex()
 	{
 		var success = Json.TryDeserialize(
-			" { \"array\"  : [ {\"i\" :   7 ,\"b\": false, \"s\" :null  },{ \"i\":  -2 ,\"b\" :true,  \"s\":  \"some text\"}  ], \"numbers\" :  [0.1,1.9,-99.5],  \"str\":  \"asdad\",\"empty\" :{    }   ,\"nullArray\": null}   ",
+			" { \"array\"  : [ {\"b\": false,\"i\" :   7 , \"s\" :null  },{ \"i\":  -2 ,\"b\" :true,  \"s\":  \"some text\"}  ], \"numbers\" :  [0.1,1.9,-99.5],  \"str\":  \"asdad\",\"empty\" :{    }   ,\"nullArray\": null}   ",
 			out ComplexStruct value
 		);
 		Assert.True(success);
@@ -217,9 +219,9 @@ public sealed class JsonTypedTests
 		Assert.NotNull(value.numbers);
 		Assert.Equal(3, value.numbers.Length);
 
-		Assert.Equal(0.1f, value.numbers[0]);
-		Assert.Equal(1.9f, value.numbers[1]);
-		Assert.Equal(-99.5f, value.numbers[2]);
+		Assert.Equal(0.1f, value.numbers[0], 5);
+		Assert.Equal(1.9f, value.numbers[1], 5);
+		Assert.Equal(-99.5f, value.numbers[2], 5);
 
 		Assert.Equal("asdad", value.str);
 

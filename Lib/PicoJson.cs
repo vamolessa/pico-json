@@ -463,7 +463,7 @@ namespace PicoJson
 				this.source = source;
 				this.index = index;
 				this.currentKey = null;
-				SkipWhiteSpace(source, ref index);
+				SkipWhiteSpace(source, ref this.index);
 				return this;
 			}
 
@@ -550,7 +550,6 @@ namespace PicoJson
 					return;
 
 				value = default(T);
-				SkipWhiteSpace(source, ref index);
 				if (ConsumeNullOr(source, ref index, '{'))
 					return;
 
@@ -564,6 +563,7 @@ namespace PicoJson
 						Consume(source, ref index, '"');
 						currentKey = ConsumeString(source, ref index, sb);
 						Consume(source, ref index, ':');
+						SkipWhiteSpace(source, ref index);
 						value.Serialize(this);
 						currentKey = previousKey;
 					} while (Match(source, ref index, ','));
@@ -578,7 +578,6 @@ namespace PicoJson
 					return;
 
 				value = null;
-				SkipWhiteSpace(source, ref index);
 				if (ConsumeNullOr(source, ref index, '['))
 					return;
 
@@ -590,7 +589,10 @@ namespace PicoJson
 					{
 						SkipWhiteSpace(source, ref index);
 						var element = default(T);
+						var previousKey = currentKey;
+						currentKey = null;
 						elementSerializer(this, ref element);
+						currentKey = previousKey;
 						list.Add(element);
 					} while (Match(source, ref index, ','));
 					Consume(source, ref index, ']');
