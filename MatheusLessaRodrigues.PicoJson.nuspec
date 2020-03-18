@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<package>
+  <metadata>
+    <id>MatheusLessaRodrigues.PicoJson</id>
+    <version>1.0.0</version>
+    <title>Pico Json</title>
+    <authors>Matheus Lessa Rodrigues</authors>
+    <owners>Matheus Lessa Rodrigues</owners>
+    <projectUrl>https://github.com/matheuslessarodrigues/pico-json</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A tiny json serializer</description>
+    <releaseNotes>Initial 1.0.0 release</releaseNotes>
+    <tags>json</tags>
+    <summary>A tiny json serializer</summary>
+  </metadata>
+  <files>
+    <file src="Lib\PicoJson.cs" target="content\Lib\PicoJson.cs" />
+  </files>
+</package>
