@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>MatheusLessaRodrigues.PicoJson</PackageId>
+    <Version>1.0.1</Version>
+    <Authors>Matheus Lessa Rodrigues</Authors>
+    <Company>Matheus Lessa Rodrigues</Company>
+  </PropertyGroup>
+
+</Project>

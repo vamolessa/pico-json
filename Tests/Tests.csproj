@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Lib\Lib.csproj" />
+    <ProjectReference Include="..\PicoJson\PicoJson.csproj" />
   </ItemGroup>
 
 </Project>
