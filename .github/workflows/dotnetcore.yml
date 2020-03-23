@@ -13,19 +13,18 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - with:
-        source-url: https://nuget.pkg.github.com/matheuslessarodrigues/index.json
-    - env:
-        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 3.1.101
+        source-url: https://nuget.pkg.github.com/matheuslessarodrigues/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
     - name: Build with dotnet
       run: dotnet build --configuration Release
     - name: Test with dotnet
       run: dotnet test --configuration Release
-    - name: Build solution and generate NuGet package
+    - name: Generate NuGet package
       run: |  
         cd PicoJson
         dotnet pack --configuration Release --output pack-out
